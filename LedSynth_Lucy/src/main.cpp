@@ -184,7 +184,8 @@ void mainPrintLeds() {
 // PROTOCOLS PROTOCOLS PROTOCOLS PROTOCOLS PROTOCOLS PROTOCOLS PROTOCOLS PROTOCOLS PROTOCOLS PROTOCOLS PROTOCOLS PROTOCOLS PROTOCOLS PROTOCOLS PROTOCOLS
 #include "protocol.h"                                   // TODO this is a part of protocol, consider making an object / library for the protocol builder
 
-#include "chase.h" // Fast sync protocols for Adam
+// #include "chase.h" // Fast sync protocols for Adam
+#include "chase2.h" // Revised fast sync protocols for Adam
 
 // SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP
 // SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP SETUP
