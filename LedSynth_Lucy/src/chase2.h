@@ -16,7 +16,7 @@ long lead_TRIG_off            =  5500;
 
 unsigned long rising_edge_time = 0; // time of the rising edge of the TrigIN signal
 unsigned long falling_edge_time = 0; // time of the falling edge of the TrigIN signal
-unsigned long flash_duration = 500; // duration of the flash in FOLLOW mode
+unsigned long flash_duration = 500; // duration of the flash in FOLLOW mode, set dynamically after first flash
 
 
 void chaseHelp(String inStr) {
@@ -99,21 +99,40 @@ void chaseRun(String command) {
     setOe(0);
     tlc.setlog(chaseLEDselected, chaseLEDattValue);
 
+
+
     while (command.substring(0, 4) != "stop") {
       if (currTrigState != digitalRead(TRIGINPIN)) {
+
         currTrigState = !currTrigState; // toggle the state
         if (currTrigState) {
           rising_edge_time = micros(); // time of the rising edge
+          Serial.print("Time of rising edge [us]: ");
+          Serial.println(rising_edge_time);
           delayMicroseconds(follow_start_buffer);
           setOe(1);
+          unsigned long now = micros();
+          Serial.print("Time of led on [us]: ");
+          Serial.println(now);
+          Serial.print("flash duration [us]: ");
+          Serial.println(flash_duration);
           delayMicroseconds(flash_duration);
           setOe(0);
+          now = micros();
+          Serial.print("Time of led off [us]: ");
+          Serial.println(now);
         } else {
           falling_edge_time = micros(); // time of the falling edge
-          // calculate the flash duration for the next cycle using the time of the rising and falling edges
-          // and shortening the period by the follow_end_buffer. 500 µs is the starting value.
-          flash_duration = falling_edge_time - rising_edge_time - follow_end_buffer;
-          if (flash_duration < 0) flash_duration = 0;
+          Serial.print("Time of falling edge [us]: ");
+          Serial.println(falling_edge_time);
+          if(rising_edge_time != 0) {
+            // calculate the flash duration for the next cycle using the time of the rising and falling edges
+            // and shortening the period by the follow buffers. 500 µs is the starting value.
+            flash_duration = falling_edge_time - rising_edge_time - follow_start_buffer - follow_end_buffer;
+            if (flash_duration < 0) flash_duration = 0;
+          } else {
+            flash_duration = 500; // default value if the rising edge time is not set
+          }
         }
       }
       
@@ -122,6 +141,11 @@ void chaseRun(String command) {
         setFromSerial(command);
       }
     }
+    rising_edge_time = 0; // reset the rising edge time
+    falling_edge_time = 0; // reset the falling edge time
+    flash_duration = 500; // reset the flash duration to the default value
+    Serial.println("Stopped FOLLOW protocol");
+    setOe(0); // turn off the LED
   }
 
   if (command.substring(0, 5) == "run l") {
