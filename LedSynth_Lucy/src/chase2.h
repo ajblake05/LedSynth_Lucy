@@ -13,10 +13,12 @@ long lead_LED_off             =  5000;
 long lead_TRIG_on             =  2500;
 long lead_TRIG_off            =  5500;
 
-
 unsigned long rising_edge_time = 0; // time of the rising edge of the TrigIN signal
 unsigned long falling_edge_time = 0; // time of the falling edge of the TrigIN signal
-unsigned long flash_duration = 500; // duration of the flash in FOLLOW mode, set dynamically after first flash
+unsigned long LED_on_time = 0; // time the led turns on
+unsigned long LED_off_time = 0; // time the led turns off
+unsigned long flash_duration = 500; // duration of the flash in FOLLOW mode, set dynamically after first 
+unsigned long delta_time = 0; // holds the time difference for output
 
 
 void chaseHelp(String inStr) {
@@ -35,13 +37,13 @@ void chaseHelp(String inStr) {
   Serial.println("  Commands:");
   Serial.println("    set c +X      LED channel selection");
   Serial.println("    set a +F.F    LED attenuation value [log] (0=max, 1=1/10, 2=1/100, ...)");
-  Serial.println("    set f s +X    follow mode start buffer [us] (buffer from TrigIN start to LED ON)");
-  Serial.println("    set f e +X    follow mode  end buffer [us] (buffer from LED OFF to TrigIN end");
-  Serial.println("    set l f +X    lead mode full cycle duration [us]");
-  Serial.println("    set l a +X    lead mode   LED   ON  point [us]");
-  Serial.println("    set l b +X    lead mode   LED   OFF point [us]");
-  Serial.println("    set l c +X    lead mode TrigOUT ON  point [us]");
-  Serial.println("    set l d +X    lead mode TrigOUT OFF point [us]");
+  Serial.println("    set f s +X    follow mode start buffer [µs] (buffer from TrigIN start to LED ON)");
+  Serial.println("    set f e +X    follow mode  end buffer [µs] (buffer from LED OFF to TrigIN end");
+  Serial.println("    set l f +X    lead mode full cycle duration [µs]");
+  Serial.println("    set l a +X    lead mode   LED   ON  point [µs]");
+  Serial.println("    set l b +X    lead mode   LED   OFF point [µs]");
+  Serial.println("    set l c +X    lead mode TrigOUT ON  point [µs]");
+  Serial.println("    set l d +X    lead mode TrigOUT OFF point [µs]");
   Serial.println("    run f         start the FOLLOW protocol");
   Serial.println("    run l         start the LEAD protocol");
   Serial.println("    stop          stop the protocol");
@@ -59,14 +61,14 @@ void chaseReport(String inStr) {
   Serial.printf ("    LED selected:          %d\n", chaseLEDselected);
   Serial.printf ("    LED attenuation [log]: %5.4f\n", chaseLEDattValue);
   Serial.println("  FOLLOW mode:");
-  Serial.printf( "    LED ON  buffer  [us]: %d\n", follow_start_buffer);
-  Serial.printf( "    LED OFF buffer [us]: %d\n", follow_end_buffer);
+  Serial.printf( "    LED ON  buffer  [µs]: %d\n", follow_start_buffer);
+  Serial.printf( "    LED OFF buffer [µs]: %d\n", follow_end_buffer);
   Serial.println("  LEAD mode:");
-  Serial.printf( "    Full cycle duration [us]: %d\n", lead_full_cycle_duration);
-  Serial.printf( "      LED   ON   time   [us]: %d\n", lead_LED_on);
-  Serial.printf( "      LED   OFF  time   [us]: %d\n", lead_LED_off);
-  Serial.printf( "    TrigOUT ON   time   [us]: %d\n", lead_TRIG_on);
-  Serial.printf( "    TrigOUT OFF  time   [us]: %d\n", lead_TRIG_off);
+  Serial.printf( "    Full cycle duration [µs]: %d\n", lead_full_cycle_duration);
+  Serial.printf( "      LED   ON   time   [µs]: %d\n", lead_LED_on);
+  Serial.printf( "      LED   OFF  time   [µs]: %d\n", lead_LED_off);
+  Serial.printf( "    TrigOUT ON   time   [µs]: %d\n", lead_TRIG_on);
+  Serial.printf( "    TrigOUT OFF  time   [µs]: %d\n", lead_TRIG_off);
   Serial.println("-----------------------------------------------------------------------");
   Serial.println();
 } // end protReport
@@ -78,14 +80,14 @@ void chaseSetFromSerial(String command) {
   if (command.substring(0, 5) == "set c") {    chaseLEDselected = constrain(command.substring(5).toInt(), 0, D_NLS);                  Serial.println("Channel: " + String(chaseLEDselected)); }
   if (command.substring(0, 5) == "set a") {    chaseLEDattValue = constrain(command.substring(5).toFloat(), 0.0, float(MAX_ATT_VALUE));        Serial.println("Attenuation: " + String(chaseLEDattValue) + " log"); }
   
-  if (command.substring(0, 7) == "set f s") {       follow_start_buffer = command.substring(7).toInt();     Serial.println("Follow start buffer: " + String(follow_start_buffer) + " us"); }
-  if (command.substring(0, 7) == "set f e") {       follow_end_buffer   = command.substring(7).toInt();     Serial.println("Follow  end  buffer: " + String(follow_end_buffer  ) + " us"); }
+  if (command.substring(0, 7) == "set f s") {       follow_start_buffer = command.substring(7).toInt();     Serial.println("Follow start buffer: " + String(follow_start_buffer) + " µs"); }
+  if (command.substring(0, 7) == "set f e") {       follow_end_buffer   = command.substring(7).toInt();     Serial.println("Follow  end  buffer: " + String(follow_end_buffer  ) + " µs"); }
 
-  if (command.substring(0, 7) == "set l f") {       lead_full_cycle_duration = command.substring(7).toInt();     Serial.println("Lead full cycle duration: " + String(lead_full_cycle_duration  ) + " us"); }
-  if (command.substring(0, 7) == "set l a") {       lead_LED_on   = command.substring(7).toInt();     Serial.println("Lead LED  ON  time point: " + String(lead_LED_on  ) + " us"); }
-  if (command.substring(0, 7) == "set l b") {       lead_LED_off  = command.substring(7).toInt();     Serial.println("Lead LED  OFF time point: " + String(lead_LED_off  ) + " us"); }
-  if (command.substring(0, 7) == "set l c") {       lead_TRIG_on  = command.substring(7).toInt();     Serial.println("Lead TRIG ON  time point: " + String(lead_TRIG_on  ) + " us"); }
-  if (command.substring(0, 7) == "set l d") {       lead_TRIG_off = command.substring(7).toInt();     Serial.println("Lead TRIG OFF time point: " + String(lead_TRIG_off  ) + " us"); }
+  if (command.substring(0, 7) == "set l f") {       lead_full_cycle_duration = command.substring(7).toInt();     Serial.println("Lead full cycle duration: " + String(lead_full_cycle_duration  ) + " µs"); }
+  if (command.substring(0, 7) == "set l a") {       lead_LED_on   = command.substring(7).toInt();     Serial.println("Lead LED  ON  time point: " + String(lead_LED_on  ) + " µs"); }
+  if (command.substring(0, 7) == "set l b") {       lead_LED_off  = command.substring(7).toInt();     Serial.println("Lead LED  OFF time point: " + String(lead_LED_off  ) + " µs"); }
+  if (command.substring(0, 7) == "set l c") {       lead_TRIG_on  = command.substring(7).toInt();     Serial.println("Lead TRIG ON  time point: " + String(lead_TRIG_on  ) + " µs"); }
+  if (command.substring(0, 7) == "set l d") {       lead_TRIG_off = command.substring(7).toInt();     Serial.println("Lead TRIG OFF time point: " + String(lead_TRIG_off  ) + " µs"); }
 } // end setFromSerial
 
 void chaseRun(String command) {
@@ -107,24 +109,26 @@ void chaseRun(String command) {
         currTrigState = !currTrigState; // toggle the state
         if (currTrigState) {
           rising_edge_time = micros(); // time of the rising edge
-          Serial.print("Time of rising edge [us]: ");
-          Serial.println(rising_edge_time);
+          delta_time = rising_edge_time - falling_edge_time; // calculate the time difference
+          Serial.print("Trigger pin  low, ------- [µs]: ");
+          Serial.println(delta_time);
           delayMicroseconds(follow_start_buffer);
           setOe(1);
-          unsigned long now = micros();
-          Serial.print("Time of led on [us]: ");
-          Serial.println(now);
-          Serial.print("flash duration [us]: ");
-          Serial.println(flash_duration);
+          LED_on_time = micros(); // time the LED turns on
+          delta_time = LED_on_time - rising_edge_time; // calculate the time difference
+          Serial.print("Trigger pin high, LED off [µs]: ");
+          Serial.println(delta_time);
           delayMicroseconds(flash_duration);
           setOe(0);
-          now = micros();
-          Serial.print("Time of led off [us]: ");
-          Serial.println(now);
+          LED_off_time = micros(); // time the LED turns off
+          delta_time = LED_off_time - LED_on_time; // calculate the time difference
+          Serial.print("Trigger pin high, LED  on [µs]: ");
+          Serial.println(delta_time);
         } else {
           falling_edge_time = micros(); // time of the falling edge
-          Serial.print("Time of falling edge [us]: ");
-          Serial.println(falling_edge_time);
+          delta_time = falling_edge_time - LED_off_time; // calculate the time difference
+          Serial.print("Trigger pin high, LED off [µs]: ");
+          Serial.println(delta_time);
           if(rising_edge_time != 0) {
             // calculate the flash duration for the next cycle using the time of the rising and falling edges
             // and shortening the period by the follow buffers. 500 µs is the starting value.
@@ -143,6 +147,8 @@ void chaseRun(String command) {
     }
     rising_edge_time = 0; // reset the rising edge time
     falling_edge_time = 0; // reset the falling edge time
+    LED_on_time = 0; // reset the LED on time
+    LED_off_time = 0; // reset the LED off time
     flash_duration = 500; // reset the flash duration to the default value
     Serial.println("Stopped FOLLOW protocol");
     setOe(0); // turn off the LED
