@@ -109,26 +109,34 @@ void chaseRun(String command) {
         currTrigState = !currTrigState; // toggle the state
         if (currTrigState) {
           rising_edge_time = micros(); // time of the rising edge
-          // delta_time = rising_edge_time - falling_edge_time; // calculate the time difference
-          // Serial.print("Trigger pin  low, ------- [µs]: ");
-          // Serial.println(delta_time);
-          delayMicroseconds(follow_start_buffer);
-          setOe(1);
-          // LED_on_time = micros(); // time the LED turns on
-          // delta_time = LED_on_time - rising_edge_time; // calculate the time difference
-          // Serial.print("Trigger pin high, LED off [µs]: ");
-          // Serial.println(delta_time);
-          delayMicroseconds(flash_duration);
-          setOe(0);
-          // LED_off_time = micros(); // time the LED turns off
-          // delta_time = LED_off_time - LED_on_time; // calculate the time difference
-          // Serial.print("Trigger pin high, LED  on [µs]: ");
-          // Serial.println(delta_time);
+          delta_time = rising_edge_time - falling_edge_time; // calculate the time difference
+          Serial.print("Trigger pin  low, ------- [µs]: ");
+          Serial.println(delta_time);
+          while(rising_edge_time + follow_start_buffer > micros()) {/* busy-wait */}
+          LED_on_time_start = micros(); // time the LED starts turning on
+          setOe(1);   // turn on the LED after the start buffer
+          LED_on_time_end = micros(); // time the LED finishes turning on
+          delta_time = LED_on_time_end - rising_edge_time; // calculate the time difference
+          Serial.print("Trigger pin high, LED off [µs]: ");
+          Serial.println(delta_time);
+          delta_time = LED_on_time_start - LED_on_time_end; // calculate the time difference
+          Serial.print("Time for LED start command to execute [µs]: ");
+          Serial.println(delta_time);
+          while(rising_edge_time + follow_start_buffer + flash_duration > micros()) {/* busy-wait */}
+          LED_off_time_start = micros(); // time the LED starts turning off
+          setOe(0);  // turn off the LED after the calculated flash duration
+          LED_off_time_end = micros(); // time the LED finishes turning off
+          delta_time = LED_off_time_end - LED_on_time_end; // calculate the time difference
+          Serial.print("Trigger pin high, LED  on [µs]: ");
+          Serial.println(delta_time);
+          delta_time = LED_off_time_start - LED_off_time_end; // calculate the time difference
+          Serial.print("Time for LED end command to execute [µs]: ");
+          Serial.println(delta_time);
         } else {
           falling_edge_time = micros(); // time of the falling edge
-          // delta_time = falling_edge_time - LED_off_time; // calculate the time difference
-          // Serial.print("Trigger pin high, LED off [µs]: ");
-          // Serial.println(delta_time);
+          delta_time = falling_edge_time - LED_off_time; // calculate the time difference
+          Serial.print("Trigger pin high, LED off [µs]: ");
+          Serial.println(delta_time);
           if(rising_edge_time != 0) {
             // calculate the flash duration for the next cycle using the time of the rising and falling edges
             // and shortening the period by the follow buffers. 500 µs is the starting value.
