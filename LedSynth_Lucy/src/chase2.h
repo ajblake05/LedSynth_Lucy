@@ -15,8 +15,10 @@ long lead_TRIG_off            =  5500;
 
 unsigned long rising_edge_time = 0; // time of the rising edge of the TrigIN signal
 unsigned long falling_edge_time = 0; // time of the falling edge of the TrigIN signal
-unsigned long LED_on_time = 0; // time the led turns on
-unsigned long LED_off_time = 0; // time the led turns off
+unsigned long LED_on_time_start = 0; // time the led starts turning on
+unsigned long LED_on_time_end = 0; // time the led finishes turning on
+unsigned long LED_off_time_start = 0; // time the led starts turning off
+unsigned long LED_off_time_end = 0; // time the led finishes turning on
 unsigned long flash_duration = 500; // duration of the flash in FOLLOW mode, set dynamically after first 
 unsigned long delta_time = 0; // holds the time difference for output
 
@@ -119,7 +121,7 @@ void chaseRun(String command) {
           delta_time = LED_on_time_end - rising_edge_time; // calculate the time difference
           Serial.print("Trigger pin high, LED off [µs]: ");
           Serial.println(delta_time);
-          delta_time = LED_on_time_start - LED_on_time_end; // calculate the time difference
+          delta_time = LED_on_time_end - LED_on_time_start; // calculate the time difference
           Serial.print("Time for LED start command to execute [µs]: ");
           Serial.println(delta_time);
           while(rising_edge_time + follow_start_buffer + flash_duration > micros()) {/* busy-wait */}
@@ -129,12 +131,12 @@ void chaseRun(String command) {
           delta_time = LED_off_time_end - LED_on_time_end; // calculate the time difference
           Serial.print("Trigger pin high, LED  on [µs]: ");
           Serial.println(delta_time);
-          delta_time = LED_off_time_start - LED_off_time_end; // calculate the time difference
+          delta_time = LED_off_time_end - LED_off_time_start; // calculate the time difference
           Serial.print("Time for LED end command to execute [µs]: ");
           Serial.println(delta_time);
         } else {
           falling_edge_time = micros(); // time of the falling edge
-          delta_time = falling_edge_time - LED_off_time; // calculate the time difference
+          delta_time = falling_edge_time - LED_off_time_end; // calculate the time difference
           Serial.print("Trigger pin high, LED off [µs]: ");
           Serial.println(delta_time);
           if(rising_edge_time != 0) {
@@ -155,8 +157,10 @@ void chaseRun(String command) {
     }
     rising_edge_time = 0; // reset the rising edge time
     falling_edge_time = 0; // reset the falling edge time
-    LED_on_time = 0; // reset the LED on time
-    LED_off_time = 0; // reset the LED off time
+    LED_on_time_start = 0; // reset the LED on start time
+    LED_on_time_end = 0; // reset the LED on end time
+    LED_off_time_start = 0; // reset the LED off start time
+    LED_off_time_end = 0; // reset the LED off end time
     flash_duration = 500; // reset the flash duration to the default value
     Serial.println("Stopped FOLLOW protocol");
     setOe(0); // turn off the LED
