@@ -20,7 +20,8 @@ unsigned long LED_on_time_start = 0; // time the led starts turning on
 unsigned long LED_on_time_end = 0; // time the led finishes turning on
 unsigned long LED_off_time_start = 0; // time the led starts turning off
 unsigned long LED_off_time_end = 0; // time the led finishes turning on
-unsigned long flash_duration = 500; // duration of the flash in FOLLOW mode, set dynamically after first 
+unsigned long flash_duration = 500; // duration of the flash in FOLLOW mode, set dynamically after first flash
+unsigned long interflash_duration = 1000; // duration between flashes in FOLLOW mode, set dynamically after first flash
 unsigned long delta_time = 0; // holds the time difference for output
 
 
@@ -96,7 +97,7 @@ void chaseSetFromSerial(String command) {
 void chaseRun(String command) {
   if (command.substring(0, 3) != "run") { return; }
   setRainbow(OFF_LOG_VALUE);
-  
+
   if (command.substring(0, 5) == "run f") {
     Serial.println("Starting FOLLOW protocol, input <stop> to stop.");
 
@@ -104,58 +105,81 @@ void chaseRun(String command) {
     setOe(0);
     tlc.setlog(chaseLEDselected, chaseLEDattValue);
 
-
+    // non-blocking follow state machine variables
+    enum FollowState { F_IDLE = 0, F_LED_OFF = 1, F_LED_ON = 2};
+    FollowState fstate = F_IDLE;
+    unsigned long LED_on_target = 0;
+    unsigned long LED_off_target = 0;
 
     while (command.substring(0, 4) != "stop") {
-      if (currTrigState != digitalRead(TRIGINPIN)) {
-
-        currTrigState = !currTrigState; // toggle the state
-        if (currTrigState) {
-          rising_edge_time = micros(); // time of the rising edge
-          delta_time = rising_edge_time - falling_edge_time; // calculate the time difference
-          Serial.print("Trigger pin  low, ------- [µs]: ");
-          Serial.println(delta_time);
-          while(rising_edge_time + follow_start_buffer - update_length > micros()) {/* busy-wait */}
-          LED_on_time_start = micros(); // time the LED starts turning on
-          setOe(1);   // turn on the LED after the start buffer
-          LED_on_time_end = micros(); // time the LED finishes turning on
-          delta_time = LED_on_time_end - rising_edge_time; // calculate the time difference
-          Serial.print("Trigger pin high, LED off [µs]: ");
-          Serial.println(delta_time);
-          delta_time = LED_on_time_end - LED_on_time_start; // calculate the time difference
-          Serial.print("Time for LED start command to execute [µs]: ");
-          Serial.println(delta_time);
-          while(rising_edge_time + follow_start_buffer + flash_duration - update_length > micros()) {/* busy-wait */}
-          LED_off_time_start = micros(); // time the LED starts turning off
-          setOe(0);  // turn off the LED after the calculated flash duration
-          LED_off_time_end = micros(); // time the LED finishes turning off
-          delta_time = LED_off_time_end - LED_on_time_end; // calculate the time difference
-          Serial.print("Trigger pin high, LED  on [µs]: ");
-          Serial.println(delta_time);
-          update_length = LED_off_time_end - LED_off_time_start; // calculate the time difference
-          Serial.print("Time for LED start command to execute [µs]: ");
-          Serial.println(update_length);
-        } else {
-          falling_edge_time = micros(); // time of the falling edge
-          delta_time = falling_edge_time - LED_off_time_end; // calculate the time difference
-          Serial.print("Trigger pin high, LED off [µs]: ");
-          Serial.println(delta_time);
-          if(rising_edge_time != 0) {
-            // calculate the flash duration for the next cycle using the time of the rising and falling edges
-            // and shortening the period by the follow buffers. 500 µs is the starting value.
-            flash_duration = falling_edge_time - rising_edge_time - follow_start_buffer - follow_end_buffer;
-            if (flash_duration < 0) flash_duration = 0;
-          } else {
-            flash_duration = 100; // default value if the rising edge time is not set
+      // check trigger input (non-blocking)
+      bool newTrigState = digitalRead(TRIGINPIN);
+      if (newTrigState != currTrigState) {
+        currTrigState = newTrigState; // update stored state
+        if (currTrigState) { // rising edge -> schedule LED ON then OFF
+          rising_edge_time = micros();
+          Serial.print("Trigger pin high [µs]: ");
+          Serial.println(rising_edge_time);
+          // calculate interflash duration
+          if (rising_edge_time != 0) {
+            interflash_duration = rising_edge_time - falling_edge_time + follow_start_buffer + follow_end_buffer;
+          } else { 
+            interflash_duration = 1000; // default
           }
+        } else { // falling edge -> measure and update flash_duration
+          falling_edge_time = micros();
+          Serial.print("Trigger pin low  [µs]: ");
+          Serial.println(falling_edge_time);
+          // calculate flash duration
+          if (rising_edge_time != 0) {
+            flash_duration = falling_edge_time - rising_edge_time - follow_start_buffer - follow_end_buffer;
+          } else { 
+            flash_duration = 100; // default
+          }
+          // schedule on (account for flash_duration and update_length)
+          LED_on_target = falling_edge_time + interflash_duration - update_length;
+          // schedule off (account for flash_duration and update_length)
+          LED_off_target = falling_edge_time + interflash_duration + flash_duration - update_length;
+          fstate = F_IDLE;
         }
       }
-      
+
+      // progress state machine based on current time (non-blocking)
+      unsigned long now = micros();
+      if (fstate == F_IDLE && now >= LED_on_target) {
+        LED_on_time_start = micros();
+        setOe(1); // turn on LED
+        LED_on_time_end = micros();
+        Serial.print("LED turning on  [µs]: ");
+        Serial.println(LED_on_time_start);
+        Serial.print("LED on          [µs]: ");
+        Serial.println(LED_on_time_end);
+        fstate = F_LED_ON;
+      }
+
+      if (fstate == F_LED_ON && now >= LED_off_target) {
+        LED_off_time_start = micros();
+        setOe(0); // turn off LED
+        LED_off_time_end = micros();
+        Serial.print("LED turning off  [µs]: ");
+        Serial.println(LED_off_time_start);
+        Serial.print("LED off          [µs]: ");
+        Serial.println(LED_off_time_end);
+        // update measured update_length for next cycle
+        update_length = LED_off_time_end - LED_off_time_start;
+        fstate = F_LED_OFF;
+      }
+
+      // handle incoming serial commands (non-blocking)
       if (Serial.available() > 0) {
         command = Serial.readStringUntil('*');
         setFromSerial(command);
       }
+
+      // allow other cooperative processing here if needed (e.g. processOeAsync())
     }
+
+    // cleanup / reset (existing cleanup code remains)
     update_length = 90; // reset update length
     rising_edge_time = 0; // reset the rising edge time
     falling_edge_time = 0; // reset the falling edge time
@@ -164,6 +188,7 @@ void chaseRun(String command) {
     LED_off_time_start = 0; // reset the LED off start time
     LED_off_time_end = 0; // reset the LED off end time
     flash_duration = 500; // reset the flash duration to the default value
+    interflash_duration = 1000; // reset the flash duration to the default value
     Serial.println("Stopped FOLLOW protocol");
     setOe(0); // turn off the LED
   }

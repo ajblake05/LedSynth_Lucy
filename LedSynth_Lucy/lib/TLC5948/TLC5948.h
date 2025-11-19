@@ -8,7 +8,7 @@
 #include <SPI.h>
 #include <math.h>
 
-#define LATCH_DELAY_US 10
+#define LATCH_DELAY_US 1
 #define GSCLK_MIN_HZ  1000000
 #define GSCLK_MAX_HZ 33000000
 
@@ -48,8 +48,8 @@ class TLC5948 {
     bool debugTLCflag       = false;
     bool printFramesTLCflag = false;
 
-    int GOAL_SCLK_HZ           = 10000000; // Serial clock speed in Hz
-    int GOAL_GSCLK_HZ          = 10000000;
+    int GOAL_SCLK_HZ           = 25000000; // Serial clock speed in Hz
+    int GOAL_GSCLK_HZ          = 20000000;
     // float GOAL_GSCLK_MHZ = 8.0 ; // Gray scale closk speed in MHz (10 MHz clock gives 152 Hz repeat, with ESPWM ON and PWM > 4 it brings it up to 600 Hz)
     // float GSCLK_MIN_MHZ = 1.0  ;
     // float GSCLK_MAX_MHZ = 14.1 ;                  // PROLLY NUT NECESSARY TO HAVE THESE AS VARIABLES?
