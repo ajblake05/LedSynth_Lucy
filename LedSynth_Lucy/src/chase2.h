@@ -123,20 +123,22 @@ void chaseRun(String command) {
         setOe(1);   // turn on the LED after the start buffer
         LED_on_time_end = micros(); // time the LED finishes turning on
         LED_on = AFTER_ON; // update LED on flag
-        //Serial.println("2");
+        // Serial.println("1");
       }
 
       // Turn off the LED after the start buffer
-      if (trigState == TRIG_HIGH && LED_off == BEFORE_OFF && micros() >= LED_off_target) { 
+      if (LED_off == BEFORE_OFF && micros() >= LED_off_target) { 
         LED_off_time_start = micros(); // time the LED starts turning off
         setOe(0);   // turn on the LED after the start buffer
         LED_off_time_end = micros(); // time the LED finishes turning off
         LED_off = AFTER_OFF; // update LED off flag
-        //Serial.println("3");
+        // Serial.println("2");
       }
 
       // Calculate timings, and reset flag for the next cycle
-      if (trigState == TRIG_LOW && LED_off == AFTER_OFF && serialOutput == AFTER_SO) {
+      // "trigFallingTime != prev_trigFallingTime" to ensure this only runs once per cycle
+      if (trigState == TRIG_LOW && LED_off == AFTER_OFF 
+        && serialOutput == AFTER_SO && trigFallingTime != prev_trigFallingTime) {
         // "prev_trigFallingTime != 0" to prevent calculation on first cycle
         if (trigRisingTime != 0 && prev_trigFallingTime != 0) {
           // calculate duration of trigger low, LED off
@@ -163,7 +165,7 @@ void chaseRun(String command) {
         LED_on = BEFORE_ON; // set LED on flag to before
         LED_off = BEFORE_OFF; // set LED off flag to before
         serialOutput = BEFORE_SO; // set serial output to before
-        //Serial.println("5");
+        // Serial.println("3");
       }
 
       // Serial output of timings after each cycle
@@ -193,7 +195,7 @@ void chaseRun(String command) {
         // Serial.println(LED_off_target);
         // Serial.print("Time for LED stop command to execute [µs]: ");
         // Serial.println(update_length);
-        //Serial.println("6");
+        // Serial.println("4");
       }
           
       if (Serial.available() > 0) {
