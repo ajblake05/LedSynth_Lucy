@@ -74,9 +74,23 @@ TLC5948 tlc(D_nTLCs, D_NLS, CHmask, 6);
 
 SparkFun_OPT4048 opt;
 
+// define edge flags/timestamps
+enum TriggerState { TRIG_LOW = 0, TRIG_HIGH = 1};
+volatile uint8_t trigState = TRIG_LOW;
 bool trigReceived   = false;
+volatile unsigned long trigRisingTime = 0;
+volatile unsigned long trigFallingTime = 0;
+// trigger received flag and time sampling
 void trigInISR() {
-  trigReceived = true;
+  unsigned long t = micros();
+  if (digitalRead(TRIGINPIN)) {
+    trigRisingTime = t;
+    trigState = TRIG_HIGH;
+    trigReceived   = true;
+  } else {
+    trigFallingTime = t;
+    trigState = TRIG_LOW;
+  }
 }
 
 void trigOut(uint8_t trigPin, uint16_t dur) {
@@ -204,7 +218,7 @@ void setup() {
   Wire.begin();
 
   // interrupt routine to catch the trigIn flag
-  attachInterrupt(digitalPinToInterrupt(TRIGINPIN), trigInISR, RISING); 
+  attachInterrupt(digitalPinToInterrupt(TRIGINPIN), trigInISR, CHANGE); 
 
   loadFromEEPROM();  // Load stored data into isoLog
   mainWelcome();
