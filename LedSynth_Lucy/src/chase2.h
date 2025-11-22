@@ -97,6 +97,7 @@ void chaseRun(String command) {
     unsigned long update_length = 90; // time in microseconds to update TLC5948 settings, set dynamically after first loop
     unsigned long rising_edge_time = 0; // time of the rising edge of the TrigIN signal
     unsigned long falling_edge_time = 0; // time of the falling edge of the TrigIN signal
+    unsigned long prev_falling_edge_time = 0; // time of the falling edge from the previous cycle
     unsigned long LED_on_time_start = 0; // time the led starts turning on
     unsigned long LED_on_time_end = 0; // time the led finishes turning on
     unsigned long LED_off_time_start = 0; // time the led starts turning off
@@ -114,12 +115,10 @@ void chaseRun(String command) {
     enum LED_on_flag { BEFORE_ON = 1, AFTER_ON = 2} ;
     enum LED_off_flag { BEFORE_OFF = 1, AFTER_OFF = 2 };
     enum SerialOutput { BEFORE_SO = 1, AFTER_SO = 2 };
-    enum TargetFlags { BEFORE_TARGETS = 1, AFTER_TARGETS = 2 };
     TriggerState trigState = TRIG_LOW;
     LED_on_flag LED_on = BEFORE_ON;
     LED_off_flag LED_off = BEFORE_OFF;
-    SerialOutput serialOutput = AFTER_SO;
-    TargetFlags targetFlags = AFTER_TARGETS;
+    SerialOutput serialOutput = BEFORE_SO;
 
     while (command.substring(0, 4) != "stop") {
 
@@ -129,21 +128,62 @@ void chaseRun(String command) {
         if (currTrigState) {
           rising_edge_time = micros(); // time of the rising edge
           trigState = TRIG_HIGH; // update trigger state
-          // calculate duration of trigger low, LED off
-          TRIG_LOW_LED_OFF_duration = rising_edge_time - falling_edge_time;
-          // Serial.println("1");
+          //Serial.println("1");
         }
         else {
           falling_edge_time = micros(); // time of the falling edge
           trigState = TRIG_LOW; // update trigger state
-          LED_on = BEFORE_ON; // set LED on flag to before
-          LED_off = BEFORE_OFF; // set LED off flag to before
-          serialOutput = BEFORE_SO; // set serial output to waiting
-          targetFlags = BEFORE_TARGETS; // set target flags to ready
+          //Serial.println("4");
+        }
+      }
+
+      // Turn on the LED after the start buffer
+      if (trigState == TRIG_HIGH && LED_on == BEFORE_ON && micros() >= LED_on_target) {
+        LED_on_time_start = micros(); // time the LED starts turning on
+        setOe(1);   // turn on the LED after the start buffer
+        LED_on_time_end = micros(); // time the LED finishes turning on
+        LED_on = AFTER_ON; // update LED on flag
+        //Serial.println("2");
+      }
+
+      // Turn off the LED after the start buffer
+      if (trigState == TRIG_HIGH && LED_off == BEFORE_OFF && micros() >= LED_off_target) { 
+        LED_off_time_start = micros(); // time the LED starts turning off
+        setOe(0);   // turn on the LED after the start buffer
+        LED_off_time_end = micros(); // time the LED finishes turning off
+        LED_off = AFTER_OFF; // update LED off flag
+        //Serial.println("3");
+      }
+
+      // Calculate timings, and reset flag for the next cycle
+      if (trigState == TRIG_LOW && LED_off == AFTER_OFF && serialOutput == AFTER_SO) {
+        // "falling_edge_time != 0" to prevent calculation on first cycle
+        if (prev_falling_edge_time != 0) {
+          // calculate duration of trigger low, LED off
+          TRIG_LOW_LED_OFF_duration = rising_edge_time - prev_falling_edge_time;
+          // calculate duration of trigger high, LED off (start buffer)
+          TRIG_HIGH_LED_OFF_S_duration = LED_on_time_end - rising_edge_time;
+          // calculate duration of trigger high, LED off (start buffer)
+          TRIG_HIGH_LED_ON_duration = LED_off_time_end - LED_on_time_end;
           // calculate duration of trigger high, LED off (end buffer)
           TRIG_HIGH_LED_OFF_E_duration = falling_edge_time - LED_off_time_end;
-          // Serial.println("4");
+          // calculate the time difference for TLC5948 update
+          update_length = LED_off_time_end - LED_off_time_start; 
+          // calculate the flash duration for the next cycle using the time of the rising 
+          // and falling edges and then  shortening the period by the follow buffers.
+          flash_duration = falling_edge_time - rising_edge_time - follow_start_buffer - follow_end_buffer;
+          if (flash_duration < 0) flash_duration = 0; // prevent negative flash durations
+          // calculate the time the LED should turn on and off in the next cycle
+          LED_on_target = falling_edge_time + TRIG_LOW_LED_OFF_duration + follow_start_buffer - update_length;
+          LED_off_target = LED_on_target + flash_duration;
         }
+         // store previous falling edge time
+        prev_falling_edge_time = falling_edge_time;
+        // reset flags for the next cycle
+        LED_on = BEFORE_ON; // set LED on flag to before
+        LED_off = BEFORE_OFF; // set LED off flag to before
+        serialOutput = BEFORE_SO; // set serial output to before
+        //Serial.println("5");
       }
 
       // Serial output of timings after each cycle
@@ -159,47 +199,7 @@ void chaseRun(String command) {
         Serial.println(TRIG_HIGH_LED_OFF_E_duration);
         Serial.print("Time for LED stop command to execute [µs]: ");
         Serial.println(update_length);
-        Serial.print("LED on target [µs]: ");
-        Serial.println(LED_on_target);
-        Serial.print("LED off target [µs]: ");
-        Serial.println(LED_off_target);
-        // Serial.println("5");
-      }
-
-      // Calculate LED on and off timings, "falling_edge_time != 0" to prevent calculation on first cycle
-      if (trigState == TRIG_LOW && LED_on == BEFORE_ON && 
-        serialOutput == AFTER_SO && targetFlags == BEFORE_TARGETS && falling_edge_time != 0) {
-        targetFlags = AFTER_TARGETS; // set target flags to ready
-        // calculate the flash duration for the next cycle using the time of the rising 
-        // and falling edges and then  shortening the period by the follow buffers.
-        flash_duration = falling_edge_time - rising_edge_time - follow_start_buffer - follow_end_buffer;
-        if (flash_duration < 0) flash_duration = 0; // prevent negative flash durations
-        LED_on_target = falling_edge_time + TRIG_LOW_LED_OFF_duration + follow_start_buffer - update_length;
-        LED_off_target = LED_on_target + flash_duration;
-        // Serial.println("6");
-      }
-
-      // Turn on the LED after the start buffer
-      if (trigState == TRIG_HIGH && LED_on == BEFORE_ON && micros() >= LED_on_target) {
-        LED_on_time_start = micros(); // time the LED starts turning on
-        setOe(1);   // turn on the LED after the start buffer
-        LED_on_time_end = micros(); // time the LED finishes turning on
-        // calculate duration of trigger high, LED off (start buffer)
-        TRIG_HIGH_LED_OFF_S_duration = LED_on_time_end - rising_edge_time; 
-        LED_on = AFTER_ON; // update LED on flag
-        // Serial.println("2");
-      }
-
-      // Turn off the LED after the start buffer
-      if (trigState == TRIG_HIGH && LED_off == BEFORE_OFF && micros() >= LED_off_target) { 
-        LED_off_time_start = micros(); // time the LED starts turning off
-        setOe(0);   // turn on the LED after the start buffer
-        LED_off_time_end = micros(); // time the LED finishes turning off
-        // calculate duration of trigger high, LED off (start buffer)
-        TRIG_HIGH_LED_ON_duration = LED_off_time_end - LED_on_time_end;
-        update_length = LED_off_time_end - LED_off_time_start; // calculate the time difference
-        LED_off = AFTER_OFF; // update LED off flag
-        // Serial.println("3");
+        //Serial.println("6");
       }
           
       if (Serial.available() > 0) {
